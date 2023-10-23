@@ -60,19 +60,17 @@ def main():
     with open(args.file_path, "r", encoding="utf8") as fp:
         data = fp.readlines()
 
-    logger.info(f"Start encoding")
+    logger.info("Start encoding")
     logger.info(f"{len(data)} examples to process.")
 
     rslt = []
-    iter = 0
     interval = 10000
     start = time.time()
-    for text in data:
+    for iter, text in enumerate(data, start=1):
         text = f"{bos} {text.strip()} {sep}"
         token_ids = tokenizer.encode(text, add_special_tokens=False)
         rslt.append(token_ids)
 
-        iter += 1
         if iter % interval == 0:
             end = time.time()
             logger.info(f"{iter} examples processed. - {(end-start):.2f}s/{interval}expl")

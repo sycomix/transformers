@@ -16,6 +16,7 @@
 Preprocessing script before training DistilBERT.
 Specific to BERT -> DistilBERT.
 """
+
 import argparse
 
 import torch
@@ -33,17 +34,18 @@ if __name__ == "__main__":
     parser.add_argument("--vocab_transform", action="store_true")
     args = parser.parse_args()
 
-    if args.model_type == "bert":
-        model = BertForMaskedLM.from_pretrained(args.model_name)
-        prefix = "bert"
-    else:
-        raise ValueError(f'args.model_type should be "bert".')
+    if args.model_type != "bert":
+        raise ValueError('args.model_type should be "bert".')
 
+    model = BertForMaskedLM.from_pretrained(args.model_name)
+    prefix = "bert"
     state_dict = model.state_dict()
-    compressed_sd = {}
-
-    for w in ["word_embeddings", "position_embeddings"]:
-        compressed_sd[f"distilbert.embeddings.{w}.weight"] = state_dict[f"{prefix}.embeddings.{w}.weight"]
+    compressed_sd = {
+        f"distilbert.embeddings.{w}.weight": state_dict[
+            f"{prefix}.embeddings.{w}.weight"
+        ]
+        for w in ["word_embeddings", "position_embeddings"]
+    }
     for w in ["weight", "bias"]:
         compressed_sd[f"distilbert.embeddings.LayerNorm.{w}"] = state_dict[f"{prefix}.embeddings.LayerNorm.{w}"]
 
@@ -78,8 +80,10 @@ if __name__ == "__main__":
             ]
         std_idx += 1
 
-    compressed_sd[f"vocab_projector.weight"] = state_dict[f"cls.predictions.decoder.weight"]
-    compressed_sd[f"vocab_projector.bias"] = state_dict[f"cls.predictions.bias"]
+    compressed_sd["vocab_projector.weight"] = state_dict[
+        "cls.predictions.decoder.weight"
+    ]
+    compressed_sd["vocab_projector.bias"] = state_dict["cls.predictions.bias"]
     if args.vocab_transform:
         for w in ["weight", "bias"]:
             compressed_sd[f"vocab_transform.{w}"] = state_dict[f"cls.predictions.transform.dense.{w}"]

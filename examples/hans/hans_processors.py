@@ -71,10 +71,10 @@ def hans_convert_examples_to_features(
         processor = glue_processors[task]()
         if label_list is None:
             label_list = processor.get_labels()
-            logger.info("Using label list %s for task %s" % (label_list, task))
+            logger.info(f"Using label list {label_list} for task {task}")
         if output_mode is None:
             output_mode = glue_output_modes[task]
-            logger.info("Using output mode %s for task %s" % (output_mode, task))
+            logger.info(f"Using output mode {output_mode} for task {task}")
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
@@ -122,12 +122,12 @@ def hans_convert_examples_to_features(
 
         if ex_index < 10:
             logger.info("*** Example ***")
-            logger.info("text_a: %s" % (example.text_a))
-            logger.info("text_b: %s" % (example.text_b))
-            logger.info("guid: %s" % (example.guid))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
-            logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
+            logger.info(f"text_a: {example.text_a}")
+            logger.info(f"text_b: {example.text_b}")
+            logger.info(f"guid: {example.guid}")
+            logger.info(f'input_ids: {" ".join([str(x) for x in input_ids])}')
+            logger.info(f'attention_mask: {" ".join([str(x) for x in attention_mask])}')
+            logger.info(f'token_type_ids: {" ".join([str(x) for x in token_type_ids])}')
             logger.info("label: %s (id = %d)" % (example.label, label))
 
         features.append(
@@ -199,7 +199,7 @@ class HansProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             if i == 0:
                 continue
-            guid = "%s-%s" % (set_type, line[0])
+            guid = f"{set_type}-{line[0]}"
             text_a = line[5]
             text_b = line[6]
             pairID = line[7][2:] if line[7].startswith("ex") else line[7]

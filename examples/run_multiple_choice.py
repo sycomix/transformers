@@ -99,10 +99,21 @@ def train(args, train_dataset, model, tokenizer):
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if all(nd not in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
@@ -190,19 +201,19 @@ def train(args, train_dataset, model, tokenizer):
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
-                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                            tb_writer.add_scalar(f"eval_{key}", value, global_step)
                         if results["eval_acc"] > best_dev_acc:
                             best_dev_acc = results["eval_acc"]
                             best_steps = global_step
                             if args.do_test:
                                 results_test = evaluate(args, model, tokenizer, test=True)
                                 for key, value in results_test.items():
-                                    tb_writer.add_scalar("test_{}".format(key), value, global_step)
+                                    tb_writer.add_scalar(f"test_{key}", value, best_steps)
                                 logger.info(
                                     "test acc: %s, loss: %s, global steps: %s",
                                     str(results_test["eval_acc"]),
                                     str(results_test["eval_loss"]),
-                                    str(global_step),
+                                    str(best_steps),
                                 )
                     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
                     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
@@ -215,7 +226,7 @@ def train(args, train_dataset, model, tokenizer):
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                    output_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
                     model_to_save = (
@@ -260,7 +271,7 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
             model = torch.nn.DataParallel(model)
 
         # Eval!
-        logger.info("***** Running evaluation {} *****".format(prefix))
+        logger.info(f"***** Running evaluation {prefix} *****")
         logger.info("  Num examples = %d", len(eval_dataset))
         logger.info("  Batch size = %d", args.eval_batch_size)
         eval_loss = 0.0
@@ -298,10 +309,12 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
         result = {"eval_acc": acc, "eval_loss": eval_loss}
         results.update(result)
 
-        output_eval_file = os.path.join(eval_output_dir, "is_test_" + str(test).lower() + "_eval_results.txt")
+        output_eval_file = os.path.join(
+            eval_output_dir, f"is_test_{str(test).lower()}_eval_results.txt"
+        )
 
         with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results {} *****".format(str(prefix) + " is test:" + str(test)))
+            logger.info(f"***** Eval results {str(prefix)} is test:{str(test)} *****")
             writer.write("model           =%s\n" % str(args.model_name_or_path))
             writer.write(
                 "total batch size=%d\n"
@@ -335,12 +348,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
     assert not (evaluate and test)
     cached_features_file = os.path.join(
         args.data_dir,
-        "cached_{}_{}_{}_{}".format(
-            cached_mode,
-            list(filter(None, args.model_name_or_path.split("/"))).pop(),
-            str(args.max_seq_length),
-            str(task),
-        ),
+        f'cached_{cached_mode}_{list(filter(None, args.model_name_or_path.split("/"))).pop()}_{str(args.max_seq_length)}_{str(task)}',
     )
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
@@ -360,7 +368,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
             label_list,
             args.max_seq_length,
             tokenizer,
-            pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
+            pad_on_left=args.model_type in ["xlnet"],
             pad_token=tokenizer.pad_token_id,
             pad_token_segment_id=tokenizer.pad_token_type_id,
         )
@@ -377,8 +385,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
     all_segment_ids = torch.tensor(select_field(features, "segment_ids"), dtype=torch.long)
     all_label_ids = torch.tensor([f.label for f in features], dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-    return dataset
+    return TensorDataset(
+        all_input_ids, all_input_mask, all_segment_ids, all_label_ids
+    )
 
 
 def main():

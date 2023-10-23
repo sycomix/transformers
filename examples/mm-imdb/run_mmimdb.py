@@ -118,10 +118,21 @@ def train(args, train_dataset, model, tokenizer, criterion):
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if all(nd not in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
     ]
 
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
@@ -212,7 +223,7 @@ def train(args, train_dataset, model, tokenizer, criterion):
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer, criterion)
                         for key, value in results.items():
-                            eval_key = "eval_{}".format(key)
+                            eval_key = f"eval_{key}"
                             logs[eval_key] = value
 
                     loss_scalar = (tr_loss - logging_loss) / args.logging_steps
@@ -227,7 +238,7 @@ def train(args, train_dataset, model, tokenizer, criterion):
 
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                    output_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
                     model_to_save = (
@@ -282,7 +293,7 @@ def evaluate(args, model, tokenizer, criterion, prefix=""):
         model = torch.nn.DataParallel(model)
 
     # Eval!
-    logger.info("***** Running evaluation {} *****".format(prefix))
+    logger.info(f"***** Running evaluation {prefix} *****")
     logger.info("  Num examples = %d", len(eval_dataset))
     logger.info("  Batch size = %d", args.eval_batch_size)
     eval_loss = 0.0
@@ -324,7 +335,7 @@ def evaluate(args, model, tokenizer, criterion, prefix=""):
 
     output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
     with open(output_eval_file, "w") as writer:
-        logger.info("***** Eval results {} *****".format(prefix))
+        logger.info(f"***** Eval results {prefix} *****")
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
@@ -336,8 +347,13 @@ def load_examples(args, tokenizer, evaluate=False):
     path = os.path.join(args.data_dir, "dev.jsonl" if evaluate else "train.jsonl")
     transforms = get_image_transforms()
     labels = get_mmimdb_labels()
-    dataset = JsonlDataset(path, tokenizer, transforms, labels, args.max_seq_length - args.num_image_embeds - 2)
-    return dataset
+    return JsonlDataset(
+        path,
+        tokenizer,
+        transforms,
+        labels,
+        args.max_seq_length - args.num_image_embeds - 2,
+    )
 
 
 def main():

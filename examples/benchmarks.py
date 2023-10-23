@@ -330,11 +330,13 @@ def create_setup_and_compute(
                     )
 
     if save_to_csv:
-        with open(csv_time_filename, mode="w") as csv_time_file, open(
-            csv_memory_filename, mode="w"
-        ) as csv_memory_file:
+        with (open(csv_time_filename, mode="w") as csv_time_file, open(
+                    csv_memory_filename, mode="w"
+                ) as csv_memory_file):
 
-            assert len(model_names) > 0, "At least 1 model should be defined, but got {}".format(model_names)
+            assert (
+                model_names
+            ), f"At least 1 model should be defined, but got {model_names}"
 
             fieldnames = ["model", "batch_size", "sequence_length"]
             time_writer = csv.DictWriter(csv_time_file, fieldnames=fieldnames + ["time_in_s"])
@@ -439,8 +441,8 @@ def _compute_pytorch(
         dictionary[model_name]["time"] = {i: {} for i in batch_sizes}
         dictionary[model_name]["memory"] = {i: {} for i in batch_sizes}
 
-        print_fn("Using model {}".format(model))
-        print_fn("Number of all parameters {}".format(model.num_parameters()))
+        print_fn(f"Using model {model}")
+        print_fn(f"Number of all parameters {model.num_parameters()}")
 
         for batch_size in batch_sizes:
             if fp16:
@@ -455,13 +457,11 @@ def _compute_pytorch(
                     sequence = torch.tensor(tokenized_sequence[:slice_size], device=device).repeat(batch_size, 1)
                     try:
                         if torchscript:
-                            print_fn("Tracing model with sequence size {}".format(sequence.shape))
+                            print_fn(f"Tracing model with sequence size {sequence.shape}")
                             inference = torch.jit.trace(model, sequence)
-                            inference(sequence)
                         else:
                             inference = model
-                            inference(sequence)
-
+                        inference(sequence)
                         if not no_memory:
                             # model.add_memory_hooks()  # Forward method tracing (only for PyTorch models)
 
@@ -486,7 +486,7 @@ def _compute_pytorch(
                             dictionary[model_name]["time"][batch_size][slice_size] = "N/A"
 
                     except RuntimeError as e:
-                        print_fn("Doesn't fit on GPU. {}".format(e))
+                        print_fn(f"Doesn't fit on GPU. {e}")
                         torch.cuda.empty_cache()
                         dictionary[model_name]["time"][batch_size][slice_size] = "N/A"
                         dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
@@ -660,7 +660,7 @@ def main():
         args.models = args.models.split()
 
     print_fn = get_print_function(args.log_print, args.log_filename)
-    print_fn("Running with arguments: {}".format(args))
+    print_fn(f"Running with arguments: {args}")
 
     if args.torch:
         if is_torch_available():

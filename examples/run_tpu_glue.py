@@ -116,10 +116,21 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if all(nd not in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
@@ -151,7 +162,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
 
             # Save model checkpoint.
             if args.save_steps > 0 and global_step % args.save_steps == 0:
-                output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                output_dir = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                 logger.info("Saving model checkpoint to %s", output_dir)
 
                 if xm.is_master_ordinal():
@@ -199,7 +210,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
                     if xm.is_master_ordinal():
                         # tpu-comment: All values must be in CPU and not on TPU device
                         for key, value in results.items():
-                            tb_writer.add_scalar("eval_{}".format(key), value, global_step)
+                            tb_writer.add_scalar(f"eval_{key}", value, global_step)
                         tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
                         tb_writer.add_scalar("loss", loss_scalar, global_step)
 
@@ -226,7 +237,11 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
 
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
-    eval_outputs_dirs = (args.output_dir, args.output_dir + "-MM") if args.task_name == "mnli" else (args.output_dir,)
+    eval_outputs_dirs = (
+        (args.output_dir, f"{args.output_dir}-MM")
+        if args.task_name == "mnli"
+        else (args.output_dir,)
+    )
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
@@ -240,7 +255,7 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
         eval_dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
 
         # Eval!
-        logger.info("***** Running evaluation {} *****".format(prefix))
+        logger.info(f"***** Running evaluation {prefix} *****")
         logger.info("  Num examples = %d", len(dataloader) * args.eval_batch_size)
         logger.info("  Batch size = %d", args.eval_batch_size)
         eval_loss = 0.0
@@ -283,7 +298,7 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
         output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
         if xm.is_master_ordinal():
             with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results {} *****".format(prefix))
+                logger.info(f"***** Eval results {prefix} *****")
                 for key in sorted(results.keys()):
                     logger.info("  %s = %s", key, str(results[key]))
                     writer.write("%s = %s\n" % (key, str(results[key])))
@@ -307,12 +322,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     output_mode = output_modes[task]
     cached_features_file = os.path.join(
         args.cache_dir,
-        "cached_{}_{}_{}_{}".format(
-            "dev" if evaluate else "train",
-            list(filter(None, args.model_name_or_path.split("/"))).pop(),
-            str(args.max_seq_length),
-            str(task),
-        ),
+        f'cached_{"dev" if evaluate else "train"}_{list(filter(None, args.model_name_or_path.split("/"))).pop()}_{str(args.max_seq_length)}_{str(task)}',
     )
 
     # Load data features from cache or dataset file
@@ -346,8 +356,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     elif output_mode == "regression":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
 
-    dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
-    return dataset
+    return TensorDataset(
+        all_input_ids, all_attention_mask, all_token_type_ids, all_labels
+    )
 
 
 def main(args):
@@ -358,9 +369,7 @@ def main(args):
         and not args.overwrite_output_dir
     ):
         raise ValueError(
-            (
-                "Output directory ({}) already exists and is not empty." " Use --overwrite_output_dir to overcome."
-            ).format(args.output_dir)
+            f"Output directory ({args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
 
     # tpu-comment: Get TPU/XLA Device
@@ -368,7 +377,7 @@ def main(args):
 
     # Setup logging
     logging.basicConfig(
-        format="[xla:{}] %(asctime)s - %(levelname)s - %(name)s -   %(message)s".format(xm.get_ordinal()),
+        format=f"[xla:{xm.get_ordinal()}] %(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
@@ -385,7 +394,7 @@ def main(args):
     # Prepare GLUE task
     args.task_name = args.task_name.lower()
     if args.task_name not in processors:
-        raise ValueError("Task not found: %s" % (args.task_name))
+        raise ValueError(f"Task not found: {args.task_name}")
     processor = processors[args.task_name]()
     args.output_mode = output_modes[args.task_name]
     label_list = processor.get_labels()
@@ -413,7 +422,7 @@ def main(args):
     )
     model = model_class.from_pretrained(
         args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
+        from_tf=".ckpt" in args.model_name_or_path,
         config=config,
         cache_dir=args.cache_dir if args.cache_dir else None,
     )
@@ -462,9 +471,14 @@ def main(args):
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
-                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            checkpoints = [
+                os.path.dirname(c)
+                for c in sorted(
+                    glob.glob(
+                        f"{args.output_dir}/**/{WEIGHTS_NAME}", recursive=True
+                    )
+                )
+            ]
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
@@ -474,7 +488,7 @@ def main(args):
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix, disable_logging=disable_logging)
-            result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
+            result = {f"{k}_{global_step}": v for k, v in result.items()}
             results.update(result)
 
     return results

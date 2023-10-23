@@ -106,10 +106,10 @@ def init_gpu_params(params):
     logger.info(PREFIX + "Local rank     : %i" % params.local_rank)
     logger.info(PREFIX + "World size     : %i" % params.world_size)
     logger.info(PREFIX + "GPUs per node  : %i" % params.n_gpu_per_node)
-    logger.info(PREFIX + "Master         : %s" % str(params.is_master))
-    logger.info(PREFIX + "Multi-node     : %s" % str(params.multi_node))
-    logger.info(PREFIX + "Multi-GPU      : %s" % str(params.multi_gpu))
-    logger.info(PREFIX + "Hostname       : %s" % socket.gethostname())
+    logger.info(f"{PREFIX}Master         : {params.is_master}")
+    logger.info(f"{PREFIX}Multi-node     : {params.multi_node}")
+    logger.info(f"{PREFIX}Multi-GPU      : {params.multi_gpu}")
+    logger.info(f"{PREFIX}Hostname       : {socket.gethostname()}")
 
     # set GPU device
     torch.cuda.set_device(params.local_rank)

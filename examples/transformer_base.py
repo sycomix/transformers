@@ -67,7 +67,7 @@ class BaseTransformer(pl.LightningModule):
         )
         model = MODEL_MODES[mode].from_pretrained(
             self.hparams.model_name_or_path,
-            from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
+            from_tf=".ckpt" in self.hparams.model_name_or_path,
             config=config,
             cache_dir=cache_dir,
         )
@@ -83,11 +83,19 @@ class BaseTransformer(pl.LightningModule):
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+                "params": [
+                    p
+                    for n, p in model.named_parameters()
+                    if all(nd not in n for nd in no_decay)
+                ],
                 "weight_decay": self.hparams.weight_decay,
             },
             {
-                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                "params": [
+                    p
+                    for n, p in model.named_parameters()
+                    if any(nd in n for nd in no_decay)
+                ],
                 "weight_decay": 0.0,
             },
         ]
@@ -105,8 +113,10 @@ class BaseTransformer(pl.LightningModule):
 
     def get_tqdm_dict(self):
         avg_loss = getattr(self.trainer, "avg_loss", 0.0)
-        tqdm_dict = {"loss": "{:.3f}".format(avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
-        return tqdm_dict
+        return {
+            "loss": "{:.3f}".format(avg_loss),
+            "lr": self.lr_scheduler.get_last_lr()[-1],
+        }
 
     def test_step(self, batch, batch_nb):
         return self.validation_step(batch, batch_nb)
@@ -138,11 +148,7 @@ class BaseTransformer(pl.LightningModule):
     def _feature_file(self, mode):
         return os.path.join(
             self.hparams.data_dir,
-            "cached_{}_{}_{}".format(
-                mode,
-                list(filter(None, self.hparams.model_name_or_path.split("/"))).pop(),
-                str(self.hparams.max_seq_length),
-            ),
+            f'cached_{mode}_{list(filter(None, self.hparams.model_name_or_path.split("/"))).pop()}_{str(self.hparams.max_seq_length)}',
         )
 
     @staticmethod
@@ -199,7 +205,7 @@ class LoggingCallback(pl.Callback):
             # Log results
             for key in sorted(metrics):
                 if key not in ["log", "progress_bar"]:
-                    logger.info("{} = {}\n".format(key, str(metrics[key])))
+                    logger.info(f"{key} = {str(metrics[key])}\n")
 
     def on_test_end(self, trainer, pl_module):
         logger.info("***** Test results *****")
@@ -212,8 +218,8 @@ class LoggingCallback(pl.Callback):
             with open(output_test_results_file, "w") as writer:
                 for key in sorted(metrics):
                     if key not in ["log", "progress_bar"]:
-                        logger.info("{} = {}\n".format(key, str(metrics[key])))
-                        writer.write("{} = {}\n".format(key, str(metrics[key])))
+                        logger.info(f"{key} = {str(metrics[key])}\n")
+                        writer.write(f"{key} = {str(metrics[key])}\n")
 
 
 def add_generic_args(parser, root_dir):
@@ -270,7 +276,9 @@ def generic_train(model, args):
         ptvsd.wait_for_attach()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+        raise ValueError(
+            f"Output directory ({args.output_dir}) already exists and is not empty."
+        )
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5

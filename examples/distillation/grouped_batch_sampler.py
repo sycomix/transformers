@@ -27,8 +27,7 @@ from utils import logger
 def _quantize(x, bins):
     bins = copy.deepcopy(bins)
     bins = sorted(bins)
-    quantized = list(map(lambda y: bisect.bisect_right(bins, y), x))
-    return quantized
+    return list(map(lambda y: bisect.bisect_right(bins, y), x))
 
 
 def create_lengths_groups(lengths, k=0):
@@ -37,8 +36,8 @@ def create_lengths_groups(lengths, k=0):
     # count number of elements per group
     counts = np.unique(groups, return_counts=True)[1]
     fbins = [0] + bins + [np.inf]
-    logger.info("Using {} as bins for aspect lengths quantization".format(fbins))
-    logger.info("Count of instances per bin: {}".format(counts))
+    logger.info(f"Using {fbins} as bins for aspect lengths quantization")
+    logger.info(f"Count of instances per bin: {counts}")
     return groups
 
 
@@ -60,7 +59,7 @@ class GroupedBatchSampler(BatchSampler):
     def __init__(self, sampler, group_ids, batch_size):
         if not isinstance(sampler, Sampler):
             raise ValueError(
-                "sampler should be an instance of " "torch.utils.data.Sampler, but got sampler={}".format(sampler)
+                f"sampler should be an instance of torch.utils.data.Sampler, but got sampler={sampler}"
             )
         self.sampler = sampler
         self.group_ids = group_ids

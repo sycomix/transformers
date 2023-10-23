@@ -75,7 +75,7 @@ def compute_heads_importance(
     labels = None
     tot_tokens = 0.0
 
-    for step, batch in enumerate(tqdm(eval_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
+    for batch in tqdm(eval_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0]):
         batch = tuple(t.to(args.device) for t in batch)
         input_ids, input_mask, segment_ids, label_ids = batch
 
@@ -152,7 +152,7 @@ def mask_heads(args, model, eval_dataloader):
     num_to_mask = max(1, int(new_head_mask.numel() * args.masking_amount))
 
     current_score = original_score
-    while current_score >= original_score * args.masking_threshold:
+    while current_score >= current_score * args.masking_threshold:
         head_mask = new_head_mask.clone()  # save current head mask
         # heads from least important to most - keep only not-masked heads
         head_importance[head_mask == 0.0] = float("Inf")
@@ -204,7 +204,10 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     original_time = datetime.now() - before_time
 
     original_num_params = sum(p.numel() for p in model.parameters())
-    heads_to_prune = dict((layer, (1 - head_mask[layer].long()).nonzero().tolist()) for layer in range(len(head_mask)))
+    heads_to_prune = {
+        layer: (1 - head_mask[layer].long()).nonzero().tolist()
+        for layer in range(len(head_mask))
+    }
     assert sum(len(h) for h in heads_to_prune.values()) == (1 - head_mask.long()).sum().item()
     model.prune_heads(heads_to_prune)
     pruned_num_params = sum(p.numel() for p in model.parameters())
@@ -347,7 +350,9 @@ def main():
 
     # Setup logging
     logging.basicConfig(level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
-    logger.info("device: {} n_gpu: {}, distributed: {}".format(args.device, args.n_gpu, bool(args.local_rank != -1)))
+    logger.info(
+        f"device: {args.device} n_gpu: {args.n_gpu}, distributed: {args.local_rank != -1}"
+    )
 
     # Set seeds
     set_seed(args)
@@ -355,7 +360,7 @@ def main():
     # Prepare GLUE task
     args.task_name = args.task_name.lower()
     if args.task_name not in processors:
-        raise ValueError("Task not found: %s" % (args.task_name))
+        raise ValueError(f"Task not found: {args.task_name}")
     processor = processors[args.task_name]()
     args.output_mode = output_modes[args.task_name]
     label_list = processor.get_labels()
@@ -384,7 +389,7 @@ def main():
     )
     model = model_class.from_pretrained(
         args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
+        from_tf=".ckpt" in args.model_name_or_path,
         config=config,
         cache_dir=args.cache_dir if args.cache_dir else None,
     )
